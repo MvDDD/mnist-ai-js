@@ -1,334 +1,371 @@
-class NeuralNet {
-    constructor(layers, act = function(a) { return Math.max(a, 0) }, out = function(a) { return Math.tanh(a) }, random = Math.random) {
-        if (layers) {
-            if (layers.nodes) {
-                this.nodes = layers.nodes;
-                this.paths = layers.paths;
-                this.act = layers.act;
-                this.out = layers.out;
-                this.random = random;
-                this.err = layers.err;
-            } else {
-                this.nodes = layers.map(function(i) {
-                    return Array(i).fill(0).map(() => 0);
-                });
-                this.act = act;
-                this.out = out;
-                this.random = random;
-                this.paths = [];
-                for (let layer = 0; layer < layers.length - 1; layer++) {
-                    let pathLayer = [];
-                    for (let start = 0; start < layers[layer]; start++) {
-                        for (let end = 0; end < layers[layer + 1]; end++) {
-                            pathLayer.push([start, end, 1 / (layers[layer] * layers[layer + 1])]);
+const NeuralNet = (() => {
+    class NeuralNet {
+        constructor(layers, act = function(a) { return Math.max(a, 0) }, out = function(a) { return Math.tanh(a) }, random = Math.random) {
+            if (layers) {
+                if (layers.nodes) {
+                    this.nodes = layers.nodes;
+                    this.paths = layers.paths;
+                    this.act = layers.act;
+                    this.out = layers.out;
+                    this.random = random;
+                    this.err = layers.err;
+                } else {
+                    this.nodes = layers.map(function(i) {
+                        return Array(i).fill(0).map(() => 0);
+                    });
+                    this.act = act;
+                    this.out = out;
+                    this.random = random;
+                    this.paths = [];
+                    for (let layer = 0; layer < layers.length - 1; layer++) {
+                        let pathLayer = [];
+                        for (let start = 0; start < layers[layer]; start++) {
+                            for (let end = 0; end < layers[layer + 1]; end++) {
+                                pathLayer.push([start, end, 1 / (layers[layer] * layers[layer + 1])]);
+                            }
                         }
+                        this.paths.push(pathLayer);
                     }
-                    this.paths.push(pathLayer);
+                    this.err = 0;
                 }
-                this.err = 0;
+            }
+            this.outputSize = this.nodes[this.nodes.length - 1].length;
+            this.inputSize = this.nodes[0].length;
+        }
+
+        mutatePaths(amount) {
+            if (!this.limit) {
+                this.paths = this.paths.map(function(layer) {
+                    return layer.map(function(path) {
+                        return [path[0], path[1], path[2] + ((Math.random() - 0.5) * amount)];
+                    });
+                });
+            } else {
+                this.paths = this.paths.map(layer => layer.map(path => {
+                    let newWeight = path[2] + ((this.random() - 0.5) * amount);
+
+                    newWeight = Math.max(Math.min(newWeight, this.max), -this.max);
+                    return [path[0], path[1], newWeight];
+                }));
             }
         }
-        this.outputSize = this.nodes[this.nodes.length - 1].length;
-        this.inputSize = this.nodes[0].length;
-    }
 
-    mutatePaths(amount) {
-        if (!this.limit) {
-            this.paths = this.paths.map(function(layer) {
-                return layer.map(function(path) {
-                    return [path[0], path[1], path[2] + ((Math.random() - 0.5) * amount)];
+
+        mutateNodes(amount) {
+            if (!this.max) {
+                this.nodes = this.nodes.map(layer => layer.map(node => node + ((Math.random() - 0.5) * amount)));
+            } else {
+                this.nodes = this.nodes.map(layer => layer.map(node => {
+                    let newNode = node + ((this.random() - 0.5) * amount);
+
+                    newNode = Math.max(Math.min(newNode, this.max), -this.max);
+                    return newNode;
+                }));
+            }
+        }
+
+        clone() {
+            let n = new NeuralNet({ nodes: this.nodes.map(l => l.slice()), paths: this.paths.map(l => l.map(p => p.slice())), act: this.act, out: this.out, err: this.err });
+            if (this.max) {
+                n.max = this.max;
+            }
+            return n;
+        }
+
+        run(inputs) {
+            if (inputs.length !== this.nodes[0].length) {
+                throw new TypeError("input size incorrect: " + inputs.size);
+            }
+            let model = this.clone();
+            inputs.forEach((i, j) => model.nodes[0][j] = i);
+            model.paths.forEach((layer, layerNum) => {
+                layer.forEach(path => {
+                    model.nodes[layerNum + 1][path[1]] += model.nodes[layerNum][path[0]] * path[2];
                 });
+                model.nodes[layerNum + 1] = model.nodes[layerNum + 1].map(a => this.act(a));
             });
-        } else {
-            this.paths = this.paths.map(layer => layer.map(path => {
-                let newWeight = path[2] + ((this.random() - 0.5) * amount);
-                
-                newWeight = Math.max(Math.min(newWeight, this.max), -this.max);
-                return [path[0], path[1], newWeight];
-            }));
+            return model.nodes.pop().map(a => this.out(a));
         }
-    }
 
-    
-    mutateNodes(amount) {
-        if (!this.max) {
-            this.nodes = this.nodes.map(layer => layer.map(node => node + ((Math.random() - 0.5) * amount)));
-        } else {
-            this.nodes = this.nodes.map(layer => layer.map(node => {
-                let newNode = node + ((this.random() - 0.5) * amount);
-                
-                newNode = Math.max(Math.min(newNode, this.max), -this.max);
-                return newNode;
-            }));
-        }
-    }
 
-    clone() {
-        let n = new NeuralNet({ nodes: this.nodes.map(l => l.slice()), paths: this.paths.map(l => l.map(p => p.slice())), act: this.act, out: this.out, err: this.err });
-        if (this.max) {
-            n.max = this.max;
-        }
-        return n;
-    }
-
-    run(inputs) {
-        if (inputs.length !== this.nodes[0].length) {
-            throw new TypeError("input size incorrect: " + inputs.size);
-        }
-        let model = this.clone();
-        inputs.forEach((i, j) => model.nodes[0][j] = i);
-        model.paths.forEach((layer, layerNum) => {
-            layer.forEach(path => {
-                model.nodes[layerNum + 1][path[1]] += model.nodes[layerNum][path[0]] * path[2];
+        toString() {
+            return JSON.stringify({
+                nodes: this.nodes.map(l => l.map(v => parseFloat(v.toFixed(10)))),
+                paths: this.paths.map(l => l.map(p => [p[0], p[1], parseFloat(p[2].toFixed(10))])),
+                act: this.act.toString(),
+                out: this.out.toString()
             });
-            model.nodes[layerNum + 1] = model.nodes[layerNum + 1].map(a => this.act(a));
-        });
-        return model.nodes.pop().map(a => this.out(a));
-    }
-
-    
-    toString() {
-        return JSON.stringify({
-            nodes: this.nodes.map(l => l.map(v => parseFloat(v.toFixed(10)))),
-            paths: this.paths.map(l => l.map(p => [p[0], p[1], parseFloat(p[2].toFixed(10))])),
-            act: this.act.toString(),
-            out: this.out.toString()
-        });
-    }
-
-    export(){
-        return this.toString()
-    }
-
-    
-    fromString(str) {
-        try {
-            let m = JSON.parse(str);
-            m.act = eval("(() => { return " + m.act + " })()");
-            m.out = eval("(() => { return " + m.out + " })()");
-            return new NeuralNet(m);
-        } catch {
-            return this;
         }
-    }
 
-    fromFile(path){
-        try{
-            this.fromString(require("fs").readFileSync())
-        } catch {
-            return this
+        export () {
+            return this.toString()
         }
-    }
 
-    from(net) {
-        return net.clone();
-    }
 
-    normalize(){
-        let normalised = this.clone();
+        fromString(str) {
+            try {
+                let m = JSON.parse(str);
+                m.act = eval("(() => { return " + m.act + " })()");
+                m.out = eval("(() => { return " + m.out + " })()");
+                return new NeuralNet(m);
+            } catch {
+                return this;
+            }
+        }
 
-        let maxNode = Math.max(...normalised.nodes.flat());
-        let maxPath = Math.max(...normalised.paths.map(l => l.map(p => p[2])).flat());
+        fromFile(path) {
+            try {
+                this.fromString(require("fs").readFileSync())
+            } catch {
+                return this
+            }
+        }
 
-        normalised.nodes = normalised.nodes.map(
-            layer => layer.map(
-                node => (node / maxNode)
+        from(net) {
+            return net.clone();
+        }
+
+        normalize() {
+            let normalised = this.clone();
+
+            let maxNode = Math.max(...normalised.nodes.flat());
+            let maxPath = Math.max(...normalised.paths.map(l => l.map(p => p[2])).flat());
+
+            normalised.nodes = normalised.nodes.map(
+                layer => layer.map(
+                    node => (node / maxNode)
                 )
             );
 
-        normalised.paths.forEach(
-            layer => layer.forEach(
-                path => path[2] = (path[2] / maxPath) / 4)
+            normalised.paths.forEach(
+                layer => layer.forEach(
+                    path => path[2] = (path[2] / maxPath) / 4)
             );
 
-        return normalised
-    }
-
-    draw(ctx, size = 20) {
-        let normalised = this.clone();
-
-        let maxNode = Math.max(...normalised.nodes.flat());
-        let maxPath = Math.max(...normalised.paths.map(l => l.map(p => p[2])).flat());
-
-        normalised.nodes = normalised.nodes.map(l => l.map(n => (n / maxNode) * size));
-        normalised.paths.forEach(layer => layer.forEach(path => path[2] = (path[2] / maxPath) * size / 4));
-
-
-        const layerWidth = (ctx.canvas.width - 80) / (normalised.nodes.length + 1);
-        const radius = 20; 
-
-        let nodePositions = [];
-
-        
-        for (let layer = 0; layer < normalised.nodes.length; layer++) {
-            const layerHeight = (ctx.canvas.height - 80) / (normalised.nodes[layer].length + 1);
-            let currentLayerPositions = [];
-
-            for (let node = 0; node < normalised.nodes[layer].length; node++) {
-                const x = ((layer + 1) * layerWidth) + 40;
-                const y = ((node + 1) * layerHeight) + 40;
-                currentLayerPositions.push({ x, y });
-
-                
-                ctx.lineWidth = 2;
-                ctx.beginPath();
-                ctx.arc(x, y, Math.abs(normalised.nodes[layer][node]), 0, Math.PI * 2);
-                ctx.fillStyle = "#3498db";
-                ctx.fill();
-                ctx.stroke();
-            }
-
-            nodePositions.push(currentLayerPositions);
+            return normalised
         }
 
-        
-        ctx.strokeStyle = "#2c3e50";
-        for (let layer = 0; layer < normalised.paths.length; layer++) {
-            for (let path of normalised.paths[layer]) {
-                const start = nodePositions[layer][path[0]];
-                const end = nodePositions[layer + 1][path[1]];
-                ctx.lineWidth = Math.abs(path[2]);
+        draw(ctx, size = 20) {
+            let normalised = this.clone();
 
-                ctx.beginPath();
-                ctx.moveTo(start.x, start.y);
-                ctx.lineTo(end.x, end.y);
-                ctx.stroke();
-            }
-        }
-    }
+            let maxNode = Math.max(...normalised.nodes.flat());
+            let maxPath = Math.max(...normalised.paths.map(l => l.map(p => p[2])).flat());
 
-    
-    train(inputs, expectedOutputs, learningRate = 0.01) {
-        if (inputs.length !== expectedOutputs.length) {
-            throw new Error("Inputs and expected outputs must have the same length.");
-        }
-        
-        for (let i = 0; i < inputs.length; i++) {
-            const output = this.run(inputs[i]);
-            const target = expectedOutputs[i];
+            normalised.nodes = normalised.nodes.map(l => l.map(n => (n / maxNode) * size));
+            normalised.paths.forEach(layer => layer.forEach(path => path[2] = (path[2] / maxPath) * size / 4));
 
-            
-            const error = target.map((t, index) => t - output[index]);
-            this.err += error.reduce((sum, e) => sum + Math.pow(e, 2), 0); 
 
-            
-            for (let layer = this.paths.length - 1; layer >= 0; layer--) {
-                this.paths[layer].forEach(path => {
-                    const inputValue = this.nodes[layer][path[0]];
-                    const outputValue = this.nodes[layer + 1][path[1]];
-                    const gradient = error[path[1]] * (this.act === Math.tanh ? 1 - Math.pow(outputValue, 2) : 1);
-                    path[2] += learningRate * gradient * inputValue;
-                });
-            }
-        }
-        this.err /= inputs.length; 
-    }
-}
+            const layerWidth = (ctx.canvas.width - 80) / (normalised.nodes.length + 1);
+            const radius = 20;
 
-class GPUNet {
-    constructor(network, actName, retName, populationSize, GPU = null, handletype = "common") {
-        this.main = network;
-        this.actTypes = ["sin", "cos", "tanh", "ReLu", "leakyReLu"];
-        this.outTypes = ["sin", "cos", "tanh", "ReLu", "leakyReLu"];
-        this.config = { handletype, populationSize, actName, retName, dataLength: 0 };
-        this.gpu = GPU;
-        this.population = Array.from({ length: populationSize }, () => this.main.clone());
-    }
+            let nodePositions = [];
 
-    setUp() {
-        if (this.gpu !== null) {
-            this.runKernel = this.gpu.createKernel(this.kernelFunction()).setOutput([this.config.populationSize, this.main.outputSize]);
-        }
-    }
 
-    kernelFunction() {
-        return function kernel() {
-            function activate(value) {
-                return value < 0 ? 0.1 * value : value;
-            }
-            function outputFunction(value) {
-                return Math.tanh(value);
-            }
-            function netRun(net, inputs) {
-                for (let i = 0; i < inputs.length; i++) {
-                    net[0][0][i] = inputs[i];
+            for (let layer = 0; layer < normalised.nodes.length; layer++) {
+                const layerHeight = (ctx.canvas.height - 80) / (normalised.nodes[layer].length + 1);
+                let currentLayerPositions = [];
+
+                for (let node = 0; node < normalised.nodes[layer].length; node++) {
+                    const x = ((layer + 1) * layerWidth) + 40;
+                    const y = ((node + 1) * layerHeight) + 40;
+                    currentLayerPositions.push({ x, y });
+
+
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.arc(x, y, Math.abs(normalised.nodes[layer][node]), 0, Math.PI * 2);
+                    ctx.fillStyle = "#3498db";
+                    ctx.fill();
+                    ctx.stroke();
                 }
 
-                for (let layerNum = 0; layerNum < net[1].length; layerNum++) {
-                    let layer = net[1][layerNum];
-                    for (let j = 0; j < layer.length; j++) {
-                        let [fromNode, toNode, weight] = layer[j];
-                        net[0][layerNum + 1][toNode] += net[0][layerNum][fromNode] * weight;
-                    }
-
-                    for (let k = 0; k < net[0][layerNum + 1].length; k++) {
-                        net[0][layerNum + 1][k] = activate(net[0][layerNum + 1][k]);
-                    }
-                }
-
-                return net[0][net[0].length - 1].map(outputFunction);
+                nodePositions.push(currentLayerPositions);
             }
 
-            let input = this.constants.data[this.thread.x];
-            let net = this.constants.population[this.thread.x];
-            return netRun(net, input);
-        };
-    }
 
-    run(inputs) {
-        if (this.config.dataLength !== inputs.length) {
-            this.config.dataLength = inputs.length;
-            this.setUp();
-        }
-        this.runKernel.setConstants({ population: this.gpuPopulation(), data: inputs });
-        return this.runKernel();
-    }
+            ctx.strokeStyle = "#2c3e50";
+            for (let layer = 0; layer < normalised.paths.length; layer++) {
+                for (let path of normalised.paths[layer]) {
+                    const start = nodePositions[layer][path[0]];
+                    const end = nodePositions[layer + 1][path[1]];
+                    ctx.lineWidth = Math.abs(path[2]);
 
-    train(inputs, expectedOutput, errcalc) {
-        this.config.dataLength = inputs.length;
-        this.setUp();
-        this.runKernel.setConstants({
-            population: this.gpuPopulation(),
-            data: inputs,
-            train: true,
-            output: expectedOutput
-        });
-        this.runKernel().forEach((data, i) => {
-            this.population[i].err = errcalc(data);
-        });
-    }
-
-    refillPopulation() {
-        this.population = Array.from({ length: this.config.populationSize }, () => this.main.clone());
-    }
-
-    gpuPopulation() {
-        return this.population.map(net => [net.nodes, net.paths]);
-    }
-
-    mutatePopulation(a, b) {
-        this.population.forEach(net => {
-            net.mutateNodes(a);
-            net.mutatePaths(b);
-        });
-    }
-
-    select(selector, callback) {
-        if (selector === 'errorRate') {
-            this.main = this.population.sort((a, b) => callback(a.err, b.err))[0].clone;
+                    ctx.beginPath();
+                    ctx.moveTo(start.x, start.y);
+                    ctx.lineTo(end.x, end.y);
+                    ctx.stroke();
+                }
+            }
         }
     }
 
-    get resultNet() {
-        return this.main.clone();
+    class GPUNet {
+        constructor(net, populationSize, runtype, gpu) {
+            // Helper function to convert string to named function
+            function convertToNamedFunction(functionString, name) {
+                functionString = functionString.trim();
+                if (functionString.includes('=>')) {
+                    let arrowParts = functionString.split('=>');
+                    let params = arrowParts[0].trim();
+                    let body = arrowParts[1].trim();
+                    if (!params.startsWith('(')) {
+                        params = '(' + params + ')';
+                    }
+                    if (!body.startsWith('{')) {
+                        body = `{ return ${body}; }`;
+                    }
+                    return `function ${name}${params} ${body}`;
+                }
+                const functionPattern = /function\s*(\w*)\s*([^)]*)\s*{([\s\S]*)}/;
+                const match = functionString.match(functionPattern);
+                if (match) {
+                    let params = match[2].trim();
+                    let body = match[3].trim();
+                    return `function ${name}(${params}) { ${body} }`;
+                }
+                throw new Error("Invalid function string");
+            }
+            
+            function runNet(nodes, paths, input) {
+                let nodes2 = nodes.slice();
+            
+                // Set the inputs
+                for (let i = 0; i < this.constants.nodeOffsets[1]; i++) {
+                    nodes2[i] += input[i];
+                }
+            
+                // Prepare output array
+                let out = [];
+            
+                // Run the network across layers
+                for (let layer = 0; layer < this.constants.numLayers - 1; layer++) {
+                    for (let path = 0; path < this.constants.pathOffsets[layer] / 3; path++) {
+                        let p = pathIndex(layer, path);
+                        let value = activation(nodes2[nodeIndex(layer, paths[p[0]])]);
+                        nodes2[nodeIndex(layer + 1, paths[p[1]])] += value * paths[p[2]];
+                    }
+                }
+            
+                // Gather the output using direct indexing
+                for (let i = 0; i < this.constants.outputSize; i++) {
+                    out[i] = output(nodes2[nodeIndex(this.constants.numLayers - 1, i)]);
+                }
+                return out;
+            }
+            
+            this.net = net
+            this.runtype = runtype == "normal" ? 0 : 1;
+            this.gpu = gpu;
+            this.mainNodes = net.nodes.flat();
+            this.mainPaths = net.paths.flat(2);
+            this.nodeCumulativeSizes = this.computeCumulativeSizes(net.nodes.map(layer => layer.size));
+            this.pathCumulativeLengths = this.computeCumulativeSizes(net.paths.map(layer => layer.length * 3));
+            this.populationSize = populationSize;
+            this.inputs = []
+
+            // Prepare the kernel functions as string representations
+            let nodeIndex = (function nodeIndex(layer, node) { return this.constants.nodeOffsets[layer] + node; }).toString();
+            let pathIndex = (function pathIndex(layer, path) { const startIndex = this.constants.pathOffsets[layer] + path * 3; return [startIndex, startIndex + 1, startIndex + 2]; }).toString();
+            let activation = convertToNamedFunction(net.act.toString(), "activation");
+            let output = convertToNamedFunction(net.out.toString(), "output");
+            runNet = runNet.toString()
+            console.log("init")
+            this.funcStr = `function(_) {
+            ${nodeIndex};
+            ${pathIndex};
+            ${activation};
+            ${output};
+            ${runNet};
+
+            let outputArray = [];
+            if (this.constants.runtype == 1) {
+                for (let i = 0; i < this.constants.dataSize; i++) {
+                    outputArray[i] = runNet(this.constants.pNode[this.thread.x], this.constants.pPath[this.thread.x], this.constants.dataset[i]);
+                }
+                return outputArray; // Return the output array for population-based
+            } else if (this.constants.runtype == 0) {
+                for (let i = 0; i < this.constants.populationSize; i++) {
+                    outputArray[i] = runNet(this.constants.pNode[i], this.constants.pPath[i], this.constants.dataset[this.thread.x]);
+                }
+                return outputArray; // Return the output array for dataset-based
+            }
+        }`;
+        }
+        
+        run(mutation){
+            this.recompile(mutation)
+            return this.kernel(null)
+        }
+
+        // Prepare the GPU kernel with constants and input data
+        setInput(data) {
+            this.inputs = data;
+            console.log("create")
+            this.kernel = this.gpu.createKernel(eval("(()=>{return " + this.funcStr + "})()"))
+            this.recompile(0)
+            console.log("compilation done")
+        }
+
+        // Recompile the GPU kernel after mutation
+        recompile(mutation) {
+            console.log("setoutput")
+            this.kernel
+                .setConstants(this.prepareConstants(mutation))
+            console.log("constants done")
+            
+            let outputSize = [this.runtype ? this.populationSize : this.inputs.length]
+            outputSize.length = 1
+            this.kernel
+                .setOutput([outputSize])
+            console.log("setoutput done")
+        }
+
+        // Prepare constants with mutation applied
+        prepareConstants(mutation) {
+            console.log("prepare inputs")
+            const mf = () => ((Math.random() - 0.5) * mutation);
+
+            const nodes = this.mainNodes.slice();
+            const paths = this.mainPaths.slice();
+            const netsNodes = Array(this.populationSize).fill(0).map(() => nodes.map(a => a + mf()));
+            const netsPaths = Array(this.populationSize).fill(0).map(() => paths.map(p => [p[0], p[1], p[2] + mf()]));
+console.log("net")
+
+            return {
+                pNode: netsNodes,
+                pPath: netsPaths,
+                dataset: this.inputs,
+                nodeOffsets: this.nodeCumulativeSizes,
+                pathOffsets: this.pathCumulativeLengths,
+                dataSize: this.inputs.length,
+                runtype: this.runtype,
+                populationSize:this.populationSize,
+                numlayers:this.main,
+                outputSize:this.net.nodes[this.net.nodes.length -1].length
+            };
+        }
+
+        // Compute cumulative sizes for nodes and paths across layers
+        computeCumulativeSizes(sizes) {
+            const cumulative = [0];
+            for (let i = 1; i < sizes.length; i++) {
+                cumulative[i] = cumulative[i - 1] + sizes[i - 1];
+            }
+            return cumulative;
+        }
+
+        // Get node index from cumulative sizes
+        getNodeIndex(layer, node) {
+            return this.nodeCumulativeSizes[layer] + node;
+        }
+
+        // Get path index from cumulative sizes
+        getPathIndex(layer, path) {
+            const startIndex = this.pathCumulativeLengths[layer] + path * 3;
+            return [startIndex, startIndex + 1, startIndex + 2];
+        }
     }
 
-    get err() {
-        return this.main.err;
-    }
-}
 
-
-if (typeof self === "undefined") {
-    module.exports = { NeuralNet, GPUNet };
-}
+    return { NeuralNet, GPUNet };
+})();
