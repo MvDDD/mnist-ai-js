@@ -270,7 +270,7 @@ const NeuralNet = (() => {
             let output = convertToNamedFunction(net.out.toString(), "output");
             runNet = runNet.toString()
             console.log("init")
-            this.funcStr = `function(_) {
+            this.funcStr = `function() {
             ${nodeIndex};
             ${pathIndex};
             ${activation};
@@ -294,7 +294,7 @@ const NeuralNet = (() => {
         
         run(mutation){
             this.recompile(mutation)
-            return this.kernel(null)
+            return this.kernel()
         }
 
         // Prepare the GPU kernel with constants and input data
@@ -313,7 +313,7 @@ const NeuralNet = (() => {
                 .setConstants(this.prepareConstants(mutation))
             console.log("constants done")
             
-            let outputSize = [this.runtype ? this.populationSize : this.inputs.length]
+            let outputSize = this.runtype ? [this.populationSize] : [this.inputs.length]
             outputSize.length = 1
             this.kernel
                 .setOutput([outputSize])

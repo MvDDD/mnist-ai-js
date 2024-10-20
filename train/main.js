@@ -1,7 +1,7 @@
 let gpu = new GPU.GPU()
 
 let net = new NeuralNet.NeuralNet(
-    [784,19,10],
+    [1,19,10],
     (a)=>Math.max(a, a/10),
     (a)=>Math.tanh(a)
     )
